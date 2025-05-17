@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scenario Selector</title>
+</head>
+<body>
+    <h1>Scenario Selector</h1>
+
+    <form method="POST" action="/set-scenario">
+        <label for="scenario">Select a Scenario:</label>
+        <select name="scenario" id="scenario">
+            {% for scenario_name, scenario_details in scenarios.items() %}
+                <option value="{{ scenario_name }}" {% if scenario_name == active_scenario %}selected{% endif %}>
+                    {{ scenario_name }}
+                </option>
+            {% endfor %}
+        </select>
+        <button type="submit">Set Scenario</button>
+    </form>
+
+    <h2>Active Scenario</h2>
+    {% if active_scenario %}
+        <p>Currently active scenario: <strong>{{ active_scenario }}</strong></p>
+        <p>Description: {{ scenarios[active_scenario]["Description"] }}</p>
+    {% else %}
+        <p>No scenario is currently active.</p>
+    {% endif %}
+
+    <h2>Generate Event</h2>
+    {% if active_scenario %}
+    <form method="POST" action="/generate-event">
+        <label for="event_status">Select Event Status:</label>
+        <select name="event_status" id="event_status">
+            {% for status in scenarios[active_scenario]["EventStatus"] %}
+                <option value="{{ status }}">{{ status }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Generate Event</button>
+    </form>
+    {% else %}
+        <p>Please select a scenario first to generate an event.</p>
+    {% endif %}
+
+    <hr>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul>
+        {% for category, message in messages %}
+          <li><strong>{{ category|capitalize }}:</strong> {{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    {% if last_event %}
+        <h3>Last Generated Event</h3>
+        <pre>{{ last_event | tojson(indent=2) }}</pre>
+    {% endif %}
+</body>
+</html>

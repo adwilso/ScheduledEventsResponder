@@ -1,0 +1,16 @@
+# Ignore all subfolders
+*/
+
+# Except the Templates folder
+!Templates/
+
+# Optionally, ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore other common files
+.env
+.DS_Store
+Thumbs.db
