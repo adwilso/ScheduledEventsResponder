@@ -5,6 +5,13 @@ from datetime import datetime, timedelta, timezone
 import threading
 import time
 
+#TODO: List for Monday:
+# 1. Create readme file
+# 2. Update description strings to real ones 
+# 3. Confirm timings on events, switch to minutes on the autorunners
+# 3. Add more descriptive scenario descriptions
+
+
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Needed for flashing messages
 
@@ -157,13 +164,15 @@ def index():
 def set_scenario():
     """
     Set the active scenario based on user selection from the web UI.
+    Also resets last_event so NotBefore is recalculated for the new scenario.
     """
-    global active_scenario
+    global active_scenario, last_event
     scenario_name = request.form.get("scenario")
     if scenario_name not in scenarios:
         return redirect(url_for('index'))
 
     active_scenario = scenario_name
+    last_event = None  # Reset event state so NotBefore is recalculated
     return redirect(url_for('index'))
 
 @app.route('/generate-event', methods=['POST'])
@@ -171,7 +180,7 @@ def generate_event():
     """
     Generate a mock event based on the active scenario and user-selected event status.
     """
-    global last_event, last_doc_incarnation
+    global last_event, last_doc_incarnation, active_scenario
     if not active_scenario:
         flash("No active scenario. Please set a scenario first.", "error")
         return redirect(url_for('index'))
@@ -286,12 +295,12 @@ def auto_run_scenario():
 
 @app.route('/auto-run-scenario', methods=['POST'])
 def auto_run_scenario_route():
-    global auto_run_thread, stop_auto_run
-    stop_auto_run.set()  # Stop any previous auto-run
-    stop_auto_run = threading.Event()  # Reset event
+    global active_scenario, auto_run_thread, stop_auto_run
     if not active_scenario:
         flash("No active scenario. Please set a scenario first.", "error")
         return redirect(url_for('index'))
+    stop_auto_run.set()  # Stop any previous auto-run
+    stop_auto_run = threading.Event()  # Reset event
     def run():
         auto_run_scenario()
     auto_run_thread = threading.Thread(target=run, daemon=True)

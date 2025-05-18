@@ -37,13 +37,13 @@
                 <option value="{{ status }}">{{ status }}</option>
             {% endfor %}
         </select>
-        <button type="submit">Generate Event</button>
+        <button type="submit" id="generate-event-btn">Generate Event</button>
     </form>
     <form method="POST" action="/auto-run-scenario" style="display:inline;">
-        <button type="submit">Automatically Run Scenario</button>
+        <button type="submit" id="auto-run-btn">Automatically Run Scenario</button>
     </form>
     <form method="POST" action="/stop-auto-run" style="display:inline;">
-        <button type="submit">Stop Playback</button>
+        <button type="submit" id="stop-playback-btn">Stop Playback</button>
     </form>
     {% else %}
         <p>Please select a scenario first to generate an event.</p>
@@ -66,6 +66,7 @@
     {% endif %}
 
     <script>
+      let isAutoRunning = false;
       async function fetchLastEvent() {
         try {
           const response = await fetch('/metadata/scheduledevents');
@@ -75,6 +76,20 @@
           if (pre) {
             pre.textContent = JSON.stringify(data, null, 2);
           }
+          // Determine if auto-run is active (if the last event is not Completed/Canceled and Events is not empty)
+          let running = false;
+          if (data.Events && data.Events.length > 0) {
+            const status = data.Events[0].EventStatus;
+            if (status !== 'Completed' && status !== 'Canceled') {
+              running = true;
+            }
+          }
+          isAutoRunning = running;
+          // Enable/disable buttons
+          document.getElementById('stop-playback-btn').disabled = !isAutoRunning;
+          document.getElementById('auto-run-btn').disabled = isAutoRunning;
+          // Only disable Generate Event if auto-run is running
+          // (so it is always enabled unless scenario is running)
         } catch (e) {}
       }
       setInterval(fetchLastEvent, 2000);
