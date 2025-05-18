@@ -30,7 +30,7 @@
 
     <h2>Run Scenario</h2>
     {% if active_scenario %}
-    <form method="POST" action="/generate-event">
+    <form method="POST" action="/generate-event" style="display:inline;">
         <label for="event_status">Select Event Status:</label>
         <select name="event_status" id="event_status">
             {% for status in scenarios[active_scenario]["EventStatus"].keys() %}
@@ -38,6 +38,12 @@
             {% endfor %}
         </select>
         <button type="submit">Generate Event</button>
+    </form>
+    <form method="POST" action="/auto-run-scenario" style="display:inline;">
+        <button type="submit">Automatically Run Scenario</button>
+    </form>
+    <form method="POST" action="/stop-auto-run" style="display:inline;">
+        <button type="submit">Stop Playback</button>
     </form>
     {% else %}
         <p>Please select a scenario first to generate an event.</p>
@@ -56,7 +62,23 @@
 
     {% if last_event %}
         <h3>Last Event</h3>
-        <pre>{{ imds_event | tojson(indent=2) }}</pre>
+        <pre id="last-event-pre">{{ imds_event | tojson(indent=2) }}</pre>
     {% endif %}
+
+    <script>
+      async function fetchLastEvent() {
+        try {
+          const response = await fetch('/metadata/scheduledevents');
+          if (!response.ok) return;
+          const data = await response.json();
+          const pre = document.getElementById('last-event-pre');
+          if (pre) {
+            pre.textContent = JSON.stringify(data, null, 2);
+          }
+        } catch (e) {}
+      }
+      setInterval(fetchLastEvent, 2000);
+      window.onload = fetchLastEvent;
+    </script>
 </body>
 </html>

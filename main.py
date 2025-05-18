@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
 from collections import OrderedDict
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import threading
+import time
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Needed for flashing messages
@@ -18,9 +20,9 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 5,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
+            ("Scheduled", 15),
             ("Started", 5),
-            ("Completed", 5)
+            ("Completed", 0)
         ]),
         "EventType": "Freeze",
         "Description": "Simulates a live migration event",
@@ -33,9 +35,9 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
-            ("Started", 5),
-            ("Completed", 5)
+            ("Scheduled", 15),
+            ("Started", 10),
+            ("Completed", 0)
         ]),
         "EventType": "Reboot",
         "Description": "Simulates a user-initiated reboot",
@@ -48,9 +50,9 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
-            ("Started", 5),
-            ("Completed", 5)
+            ("Scheduled", 15),
+            ("Started", 10),
+            ("Completed", 0)
         ]),
         "EventType": "Freeze",
         "Description": "Simulates host maintenance",
@@ -63,9 +65,9 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
-            ("Started", 5),
-            ("Completed", 5)
+            ("Scheduled", 15),
+            ("Started", 10),
+            ("Completed", 0)
         ]),
         "EventType": "Redeploy",
         "Description": "Simulates a redeploy event",
@@ -78,9 +80,9 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
-            ("Started", 5),
-            ("Completed", 5)
+            ("Scheduled", 15),
+            ("Started", 10),
+            ("Completed", 0)
         ]),
         "EventType": "Redeploy",
         "Description": "Simulates a user-initiated redeploy",
@@ -93,8 +95,8 @@ scenarios = {
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
         "EventStatus": OrderedDict([
-            ("Scheduled", 5),
-            ("Canceled", 5)
+            ("Scheduled", 8),
+            ("Canceled", 0)
         ]),
         "EventType": "Freeze",
         "Description": "Simulates a canceled maintenance event",
@@ -174,22 +176,28 @@ def generate_event():
         flash("No active scenario. Please set a scenario first.", "error")
         return redirect(url_for('index'))
 
-    # Get the selected event status from the form
     event_status = request.form.get("event_status")
     if event_status not in scenarios[active_scenario]["EventStatus"]:
         flash("Invalid event status selected.", "error")
         return redirect(url_for('index'))
 
-    # Generate a mock event using the active scenario and selected event status
+    # Set NotBefore time for the event
+    scenario = scenarios[active_scenario]
+    not_before_time = None
+    if event_status == "Scheduled":
+        offset = scenario.get("NotBeforeDelayInMinutes", 0)
+        not_before_time = (datetime.now(timezone.utc) + timedelta(minutes=offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     event_id = str(uuid.uuid4())
     event = {
         "EventId": event_id,
         "Scenario": active_scenario,
         "EventStatus": event_status,
-        "ActiveScenario": scenarios[active_scenario],
+        "ActiveScenario": scenario,
+        "NotBefore": not_before_time
     }
     last_event = event
-    last_doc_incarnation += 1  # Increment document incarnation
+    last_doc_incarnation += 1
     flash(f"New event generated", "success")
     return redirect(url_for('index'))
 
@@ -209,6 +217,7 @@ def imds_scheduledevents():
     event = last_event
     scenario_details = event["ActiveScenario"]
     event_status = event["EventStatus"]
+    not_before_time = event.get("NotBefore")
 
     # If the event is Completed or Canceled, return an empty Events list
     if event_status in scenario_details["EventStatus"] and event_status in ["Completed", "Canceled"]:
@@ -217,11 +226,8 @@ def imds_scheduledevents():
             "Events": []
         }), 200
 
-    # Set NotBefore time logic
-    if event_status == "Scheduled":
-        offset = scenario_details.get("NotBeforeDelayInMinutes", 0)
-        not_before_time = (datetime.utcnow() + timedelta(minutes=offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    else:
+    # If status is Started, NotBefore must be an empty string
+    if event_status == "Started":
         not_before_time = ""
 
     imds_event = {
@@ -231,7 +237,7 @@ def imds_scheduledevents():
         "ResourceType": "VirtualMachine",
         "Resources": ["/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Compute/virtualMachines/mockvm"],
         "EventSource": scenario_details["EventSource"],
-        "NotBefore": not_before_time,
+        "NotBefore": not_before_time if not_before_time else "",
         "Description": scenario_details["Description"],
         "DurationInSeconds": scenario_details["DurationInSeconds"]
     }
@@ -239,6 +245,68 @@ def imds_scheduledevents():
         "DocumentIncarnation": last_doc_incarnation,
         "Events": [imds_event]
     }), 200
+
+auto_run_thread = None
+stop_auto_run = threading.Event()
+
+def auto_run_scenario():
+    global last_event, last_doc_incarnation, active_scenario, stop_auto_run
+    scenario = scenarios[active_scenario]
+    event_statuses = list(scenario["EventStatus"].keys())
+    durations = list(scenario["EventStatus"].values())
+    not_before_time = None
+    for idx, status in enumerate(event_statuses):
+        if stop_auto_run.is_set() or (last_event is not None and active_scenario != last_event.get("Scenario", None)):
+            break
+        # Only set NotBefore for the first event if not already set
+        if idx == 0:
+            if last_event is None or last_event.get("NotBefore") is None:
+                if status == "Scheduled":
+                    offset = scenario.get("NotBeforeDelayInMinutes", 0)
+                    not_before_time = (datetime.now(timezone.utc) + timedelta(minutes=offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    not_before_time = None
+            else:
+                not_before_time = last_event.get("NotBefore")
+        else:
+            not_before_time = last_event.get("NotBefore")
+        event_id = str(uuid.uuid4())
+        event = {
+            "EventId": event_id,
+            "Scenario": active_scenario,
+            "EventStatus": status,
+            "ActiveScenario": scenario,
+            "NotBefore": not_before_time
+        }
+        last_event = event
+        last_doc_incarnation += 1
+        if idx < len(event_statuses) - 1:
+            time.sleep(durations[idx])
+    # After reaching the last state, keep returning the same event until user changes scenario
+
+@app.route('/auto-run-scenario', methods=['POST'])
+def auto_run_scenario_route():
+    global auto_run_thread, stop_auto_run
+    stop_auto_run.set()  # Stop any previous auto-run
+    stop_auto_run = threading.Event()  # Reset event
+    if not active_scenario:
+        flash("No active scenario. Please set a scenario first.", "error")
+        return redirect(url_for('index'))
+    def run():
+        auto_run_scenario()
+    auto_run_thread = threading.Thread(target=run, daemon=True)
+    auto_run_thread.start()
+    flash("Automatically running scenario.", "success")
+    return redirect(url_for('index'))
+
+@app.route('/stop-auto-run', methods=['POST'])
+def stop_auto_run_route():
+    global stop_auto_run, last_event
+    stop_auto_run.set()
+    stop_auto_run = threading.Event()
+    last_event = None
+    flash("Event playback stopped and reset.", "success")
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     # Start the Flask web server
