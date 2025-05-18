@@ -23,12 +23,12 @@
     <h2>Active Scenario</h2>
     {% if active_scenario %}
         <p>Currently active scenario: <strong>{{ active_scenario }}</strong></p>
-        <p>Description: {{ scenarios[active_scenario]["Description"] }}</p>
+        <p>Description: {{ scenarios[active_scenario]["ScenarioDescription"] }}</p>
     {% else %}
         <p>No scenario is currently active.</p>
     {% endif %}
 
-    <h2>Generate Event</h2>
+    <h2>Run Scenario</h2>
     {% if active_scenario %}
     <form method="POST" action="/generate-event">
         <label for="event_status">Select Event Status:</label>
@@ -37,7 +37,7 @@
                 <option value="{{ status }}">{{ status }}</option>
             {% endfor %}
         </select>
-        <button type="submit">Generate Event</button>
+        <button type="submit">Manually Set Event State</button>
     </form>
     {% else %}
         <p>Please select a scenario first to generate an event.</p>
@@ -55,8 +55,8 @@
     {% endwith %}
 
     {% if last_event %}
-        <h3>Last Generated Event</h3>
-        <pre>{{ last_event | tojson(indent=2) }}</pre>
+        <h3>Last Event</h3>
+        <pre>{{ imds_event | tojson(indent=2) }}</pre>
     {% endif %}
 </body>
 </html>

@@ -19,6 +19,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Started", "Completed"],
         "EventType": "Freeze",
         "Description": "Simulates a live migration event",
+        "ScenarioDescription": "This scenario simulates a live migration event for testing.",
         "EventSource": "Platform",
         "DurationInSeconds": 5,
     },
@@ -29,6 +30,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Started", "Completed"],
         "EventType": "Reboot",
         "Description": "Simulates a user-initiated reboot",
+        "ScenarioDescription": "This scenario simulates a reboot initiated by the user.",
         "EventSource": "User",
         "DurationInSeconds": -1,
     },
@@ -39,6 +41,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Started", "Completed"],
         "EventType": "Freeze",
         "Description": "Simulates host maintenance",
+        "ScenarioDescription": "This scenario simulates host agent maintenance.",
         "EventSource": "Platform",
         "DurationInSeconds": 9,
     },
@@ -49,6 +52,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Started", "Completed"],
         "EventType": "Redeploy",
         "Description": "Simulates a redeploy event",
+        "ScenarioDescription": "This scenario simulates a platform-initiated redeploy.",
         "EventSource": "Platform",
         "DurationInSeconds": -1
     },
@@ -59,6 +63,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Started", "Completed"],
         "EventType": "Redeploy",
         "Description": "Simulates a user-initiated redeploy",
+        "ScenarioDescription": "This scenario simulates a redeploy initiated by the user.",
         "EventSource": "User",
         "DurationInSeconds": -1
     },
@@ -69,6 +74,7 @@ scenarios = {
         "EventStatus": ["Scheduled", "Canceled"],
         "EventType": "Freeze",
         "Description": "Simulates a canceled maintenance event",
+        "ScenarioDescription": "This scenario simulates a maintenance event that was canceled.",
         "EventSource": "Platform",
         "DurationInSeconds": 9,
     }
@@ -80,11 +86,45 @@ def index():
     """
     Render the main page with the scenario and event status selection form.
     """
+    # Prepare IMDS event format for the last event, if it exists
+    imds_event = None
+    if last_event:
+        scenario_details = last_event["ActiveScenario"]
+        event_status = last_event["EventStatus"]
+        if event_status in ["Completed", "Canceled"]:
+            imds_event = {
+                "DocumentIncarnation": last_doc_incarnation,
+                "Events": []
+            }
+        else:
+            if event_status == "Scheduled":
+                offset = scenario_details.get("NotBeforeDelayInMinutes", 0)
+                not_before_time = (datetime.utcnow() + timedelta(minutes=offset)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                not_before_time = ""
+            imds_event = {
+                "DocumentIncarnation": last_doc_incarnation,
+                "Events": [
+                    {
+                        "EventId": last_event["EventId"],
+                        "EventStatus": event_status,
+                        "EventType": scenario_details["EventType"],
+                        "ResourceType": "VirtualMachine",
+                        "Resources": ["/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Compute/virtualMachines/mockvm"],
+                        "EventSource": scenario_details["EventSource"],
+                        "NotBefore": not_before_time,
+                        "Description": scenario_details["Description"],
+                        "DurationInSeconds": scenario_details["DurationInSeconds"]
+                    }
+                ]
+            }
     return render_template(
         'index.html',
         scenarios=scenarios,
         active_scenario=active_scenario,
-        last_event=last_event
+        last_event=last_event,
+        last_doc_incarnation=last_doc_incarnation,
+        imds_event=imds_event
     )
 
 @app.route('/set-scenario', methods=['POST'])
@@ -126,7 +166,7 @@ def generate_event():
     }
     last_event = event
     last_doc_incarnation += 1  # Increment document incarnation
-    flash(f"New event generated: {event}", "success")
+    flash(f"New event generated", "success")
     return redirect(url_for('index'))
 
 @app.route('/metadata/scheduledevents', methods=['GET'])
