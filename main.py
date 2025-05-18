@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash
+from collections import OrderedDict
 import uuid
 from datetime import datetime, timedelta
 
@@ -16,7 +17,11 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 5,
-        "EventStatus": ["Scheduled", "Started", "Completed"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Started", 5),
+            ("Completed", 5)
+        ]),
         "EventType": "Freeze",
         "Description": "Simulates a live migration event",
         "ScenarioDescription": "This scenario simulates a live migration event for testing.",
@@ -27,7 +32,11 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
-        "EventStatus": ["Scheduled", "Started", "Completed"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Started", 5),
+            ("Completed", 5)
+        ]),
         "EventType": "Reboot",
         "Description": "Simulates a user-initiated reboot",
         "ScenarioDescription": "This scenario simulates a reboot initiated by the user.",
@@ -38,7 +47,11 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
-        "EventStatus": ["Scheduled", "Started", "Completed"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Started", 5),
+            ("Completed", 5)
+        ]),
         "EventType": "Freeze",
         "Description": "Simulates host maintenance",
         "ScenarioDescription": "This scenario simulates host agent maintenance.",
@@ -49,7 +62,11 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
-        "EventStatus": ["Scheduled", "Started", "Completed"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Started", 5),
+            ("Completed", 5)
+        ]),
         "EventType": "Redeploy",
         "Description": "Simulates a redeploy event",
         "ScenarioDescription": "This scenario simulates a platform-initiated redeploy.",
@@ -60,7 +77,11 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
-        "EventStatus": ["Scheduled", "Started", "Completed"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Started", 5),
+            ("Completed", 5)
+        ]),
         "EventType": "Redeploy",
         "Description": "Simulates a user-initiated redeploy",
         "ScenarioDescription": "This scenario simulates a redeploy initiated by the user.",
@@ -71,7 +92,10 @@ scenarios = {
         "EventId": str(uuid.uuid4()),
         "NotBeforeDelayInMinutes": 15,
         "StartedDurationInMinutes": 10,
-        "EventStatus": ["Scheduled", "Canceled"],
+        "EventStatus": OrderedDict([
+            ("Scheduled", 5),
+            ("Canceled", 5)
+        ]),
         "EventType": "Freeze",
         "Description": "Simulates a canceled maintenance event",
         "ScenarioDescription": "This scenario simulates a maintenance event that was canceled.",
@@ -91,7 +115,7 @@ def index():
     if last_event:
         scenario_details = last_event["ActiveScenario"]
         event_status = last_event["EventStatus"]
-        if event_status in ["Completed", "Canceled"]:
+        if event_status in scenario_details["EventStatus"] and event_status in ["Completed", "Canceled"]:
             imds_event = {
                 "DocumentIncarnation": last_doc_incarnation,
                 "Events": []
@@ -187,7 +211,7 @@ def imds_scheduledevents():
     event_status = event["EventStatus"]
 
     # If the event is Completed or Canceled, return an empty Events list
-    if event_status in ["Completed", "Canceled"]:
+    if event_status in scenario_details["EventStatus"] and event_status in ["Completed", "Canceled"]:
         return jsonify({
             "DocumentIncarnation": last_doc_incarnation,
             "Events": []
