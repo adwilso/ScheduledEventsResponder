@@ -158,3 +158,84 @@ def test_single_status_scenario(client):
     assert event['EventSource'] == 'TestSource'
     assert event['Description'] == 'Single status test'
     assert event['NotBefore'] != ''
+
+def test_resources_field_default_and_custom(client):
+    scenario_name = list(scenarios.keys())[0]
+    client.post('/set-scenario', data={'scenario': scenario_name})
+
+    # Default resources
+    client.post('/generate-event', data={'event_status': 'Scheduled'})
+    resp = client.get('/metadata/scheduledevents')
+    data = resp.get_json()
+    if data['Events']:
+        assert data['Events'][0]['Resources'] == ['vmss_vm1']
+
+    # Custom resources
+    custom_resources = "vmss_vm2, vmss_vm3"
+    client.post('/generate-event', data={'event_status': 'Scheduled', 'resources': custom_resources})
+    resp = client.get('/metadata/scheduledevents')
+    data = resp.get_json()
+    if data['Events']:
+        assert data['Events'][0]['Resources'] == ['vmss_vm2', 'vmss_vm3']
+
+def test_resources_field_trimming_and_empty(client):
+    scenario_name = list(scenarios.keys())[0]
+    client.post('/set-scenario', data={'scenario': scenario_name})
+
+    # Whitespace trimming
+    custom_resources = "  vmss_vm4  ,   vmss_vm5 "
+    client.post('/generate-event', data={'event_status': 'Scheduled', 'resources': custom_resources})
+    resp = client.get('/metadata/scheduledevents')
+    data = resp.get_json()
+    if data['Events']:
+        assert data['Events'][0]['Resources'] == ['vmss_vm4', 'vmss_vm5']
+
+    # Empty resources
+    client.post('/generate-event', data={'event_status': 'Scheduled', 'resources': ''})
+    resp = client.get('/metadata/scheduledevents')
+    data = resp.get_json()
+    if data['Events']:
+        assert data['Events'][0]['Resources'] == ['vmss_vm1']
+
+
+def test_imds_contract_fields(client):
+    scenario_name = list(scenarios.keys())[0]
+    client.post('/set-scenario', data={'scenario': scenario_name})
+    for status in scenarios[scenario_name]['EventStatus'].keys():
+        client.post('/generate-event', data={'event_status': status})
+        resp = client.get('/metadata/scheduledevents')
+        data = resp.get_json()
+        if data['Events']:
+            event = data['Events'][0]
+            # Required IMDS fields
+            assert 'EventId' in event
+            assert 'EventStatus' in event
+            assert 'EventType' in event
+            assert 'ResourceType' in event
+            assert 'Resources' in event
+            assert 'EventSource' in event
+            assert 'NotBefore' in event
+            assert 'Description' in event
+            assert 'DurationInSeconds' in event
+            assert isinstance(event['Resources'], list)
+
+
+def test_generate_event_with_invalid_status(client):
+    scenario_name = list(scenarios.keys())[0]
+    client.post('/set-scenario', data={'scenario': scenario_name})
+    resp = client.post('/generate-event', data={'event_status': 'NotAStatus'})
+    assert resp.status_code == 302
+    resp = client.get('/metadata/scheduledevents')
+    data = resp.get_json()
+    assert data['Events'] == []
+
+
+def test_completed_canceled_event_returns_empty(client):
+    scenario_name = list(scenarios.keys())[0]
+    client.post('/set-scenario', data={'scenario': scenario_name})
+    for status in ['Completed', 'Canceled']:
+        if status in scenarios[scenario_name]['EventStatus']:
+            client.post('/generate-event', data={'event_status': status})
+            resp = client.get('/metadata/scheduledevents')
+            data = resp.get_json()
+            assert data['Events'] == []

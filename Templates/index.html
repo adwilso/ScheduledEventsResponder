@@ -30,21 +30,46 @@
 
     <h2>Run Scenario</h2>
     {% if active_scenario %}
-    <form method="POST" action="/generate-event" style="display:inline;">
-        <label for="event_status">Select Event Status:</label>
-        <select name="event_status" id="event_status">
-            {% for status in scenarios[active_scenario]["EventStatus"].keys() %}
-                <option value="{{ status }}">{{ status }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit" id="generate-event-btn">Generate Event</button>
-    </form>
-    <form method="POST" action="/auto-run-scenario" style="display:inline;">
-        <button type="submit" id="auto-run-btn">Automatically Run Scenario</button>
-    </form>
-    <form method="POST" action="/stop-auto-run" style="display:inline;">
-        <button type="submit" id="stop-playback-btn">Stop Playback</button>
-    </form>
+        <form id="resources-form" style="margin-bottom: 10px;" onsubmit="return false;">
+            <label for="resources">Resources (comma separated):</label>
+            <input type="text" id="resources-input" name="resources" value="{{ resources or 'vmss_vm1' }}">
+        </form>
+        <form method="POST" action="/generate-event" style="display:inline;" id="generate-event-form">
+            <input type="hidden" id="resources-hidden" name="resources" value="{{ resources or 'vmss_vm1' }}">
+            <label for="event_status">Select Event Status:</label>
+            <select name="event_status" id="event_status">
+                {% for status in scenarios[active_scenario]["EventStatus"].keys() %}
+                    <option value="{{ status }}">{{ status }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" id="generate-event-btn">Generate Event</button>
+        </form>
+        <form method="POST" action="/auto-run-scenario" style="display:inline;">
+            <input type="hidden" id="resources-auto-hidden" name="resources" value="{{ resources or 'vmss_vm1' }}">
+            <button type="submit" id="auto-run-btn">Automatically Run Scenario</button>
+        </form>
+        <form method="POST" action="/stop-auto-run" style="display:inline;">
+            <button type="submit" id="stop-playback-btn">Stop Playback</button>
+        </form>
+        <script>
+          // Keep the hidden resources fields in sync with the visible input
+          const resourcesInput = document.getElementById('resources-input');
+          const resourcesHidden = document.getElementById('resources-hidden');
+          const resourcesAutoHidden = document.getElementById('resources-auto-hidden');
+          if (resourcesInput) {
+            // Save resources to localStorage on input
+            resourcesInput.value = localStorage.getItem('resources') || resourcesInput.value;
+            resourcesInput.addEventListener('input', function() {
+              if (resourcesHidden) resourcesHidden.value = this.value;
+              if (resourcesAutoHidden) resourcesAutoHidden.value = this.value;
+              localStorage.setItem('resources', this.value);
+            });
+            // On form submit, save resources to localStorage
+            document.getElementById('generate-event-form').addEventListener('submit', function() {
+              localStorage.setItem('resources', resourcesInput.value);
+            });
+          }
+        </script>
     {% else %}
         <p>Please select a scenario first to generate an event.</p>
     {% endif %}

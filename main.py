@@ -6,6 +6,7 @@ import threading
 import time
 
 #TODO: List for Monday:
+# 0. Handle event approval 
 # 1. Create readme file
 # 2. Update description strings to real ones 
 # 3. Confirm timings on events, switch to minutes on the autorunners
@@ -114,11 +115,21 @@ scenarios = {
     # Add more scenarios as needed
 }
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
     """
     Render the main page with the scenario and event status selection form.
+    Allow user to set the resources array.
     """
+    global resources_list
+    # Handle resource input from the form
+    if request.method == 'POST':
+        resources_input = request.form.get('resources', 'vmss_vm1')
+        # Split by comma and strip whitespace
+        resources_list = [r.strip() for r in resources_input.split(',') if r.strip()]
+    else:
+        resources_list = ['vmss_vm1']
+
     # Prepare IMDS event format for the last event, if it exists
     imds_event = None
     if last_event:
@@ -143,7 +154,7 @@ def index():
                         "EventStatus": event_status,
                         "EventType": scenario_details["EventType"],
                         "ResourceType": "VirtualMachine",
-                        "Resources": ["/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Compute/virtualMachines/mockvm"],
+                        "Resources": resources_list if resources_list else ["vmss_vm1"],
                         "EventSource": scenario_details["EventSource"],
                         "NotBefore": not_before_time,
                         "Description": scenario_details["Description"],
@@ -157,7 +168,8 @@ def index():
         active_scenario=active_scenario,
         last_event=last_event,
         last_doc_incarnation=last_doc_incarnation,
-        imds_event=imds_event
+        imds_event=imds_event,
+        resources=','.join(resources_list) if 'resources_list' in globals() else 'vmss_vm1'
     )
 
 @app.route('/set-scenario', methods=['POST'])
@@ -180,7 +192,7 @@ def generate_event():
     """
     Generate a mock event based on the active scenario and user-selected event status.
     """
-    global last_event, last_doc_incarnation, active_scenario
+    global last_event, last_doc_incarnation, active_scenario, resources_list
     if not active_scenario:
         flash("No active scenario. Please set a scenario first.", "error")
         return redirect(url_for('index'))
@@ -189,6 +201,10 @@ def generate_event():
     if event_status not in scenarios[active_scenario]["EventStatus"]:
         flash("Invalid event status selected.", "error")
         return redirect(url_for('index'))
+
+    # Get resources from form or use default
+    resources_input = request.form.get('resources', 'vmss_vm1')
+    resources_list = [r.strip() for r in resources_input.split(',') if r.strip()]
 
     # Set NotBefore time for the event
     scenario = scenarios[active_scenario]
@@ -203,7 +219,8 @@ def generate_event():
         "Scenario": active_scenario,
         "EventStatus": event_status,
         "ActiveScenario": scenario,
-        "NotBefore": not_before_time
+        "NotBefore": not_before_time,
+        "Resources": resources_list if resources_list else ["vmss_vm1"]
     }
     last_event = event
     last_doc_incarnation += 1
@@ -227,6 +244,7 @@ def imds_scheduledevents():
     scenario_details = event["ActiveScenario"]
     event_status = event["EventStatus"]
     not_before_time = event.get("NotBefore")
+    resources = event.get("Resources", ["vmss_vm1"])
 
     # If the event is Completed or Canceled, return an empty Events list
     if event_status in scenario_details["EventStatus"] and event_status in ["Completed", "Canceled"]:
@@ -244,7 +262,7 @@ def imds_scheduledevents():
         "EventStatus": event_status,
         "EventType": scenario_details["EventType"],
         "ResourceType": "VirtualMachine",
-        "Resources": ["/subscriptions/mock/resourceGroups/mock/providers/Microsoft.Compute/virtualMachines/mockvm"],
+        "Resources": resources,
         "EventSource": scenario_details["EventSource"],
         "NotBefore": not_before_time if not_before_time else "",
         "Description": scenario_details["Description"],
