@@ -28,8 +28,8 @@ A Flask-based web application for simulating Azure Scheduled Events and IMDS (In
 
 2. Install dependencies:
     ```sh
-    python -m venv .venv
-    .venv\Scripts\activate  # On Windows
+    python -m venv .venv    
+    .\.venv\Bin\Activate.ps1 #On PowerShell
     pip install -r requirements.txt
     ```
 
@@ -38,7 +38,7 @@ A Flask-based web application for simulating Azure Scheduled Events and IMDS (In
     python main.py
     ```
 
-4. Open your browser and navigate to [http://localhost:5000](http://localhost:5000)
+4. Open your browser and navigate to [http://localhost](http://localhost)
 
 ## Usage
 
